@@ -1,4 +1,4 @@
-﻿#include <Arduino.h>
+#include <Arduino.h>
 #include <ESP32Servo.h>
 
 // ======================================================================
@@ -19,9 +19,10 @@ const int servoPins[8] = {4, 5, 6, 7, 15, 16, 17, 18}; // Distro board V2
 
 
 
-// Pulse width settings
-const int MIN_PULSE = 732;
-const int MAX_PULSE = 2929;
+// Pulse width settings for standard MG90S / SG90 servos
+// 500us (0 deg) to 2500us (180 deg), Center = 1500us (90 deg)
+const int MIN_PULSE = 500;
+const int MAX_PULSE = 2500;
 
 // ======================================================================
 // --- SETUP ---
@@ -31,14 +32,19 @@ void setup() {
   Serial.begin(115200);
   while (!Serial);
 
-  Serial.println("-----------------------------------");
-  Serial.println("   Sesame Motor Tester Interface   ");
-  Serial.println("-----------------------------------");
+  Serial.println("--------------------------------------------------");
+  Serial.println("         Sesame Motor Tester & Diagnostic         ");
+  Serial.println("--------------------------------------------------");
   Serial.println("Commands:");
-  Serial.println("1. id,angle   -> e.g. '0,90'");
-  Serial.println("2. all,angle  -> e.g. 'all,90'");
-  Serial.println("3. stop       -> Detaches/Powers down motors");
-  Serial.println("-----------------------------------");
+  Serial.println("1. id,angle  (or 'id angle')   -> e.g. '0,90' or '0 90'");
+  Serial.println("2. all,angle (or 'all angle')  -> e.g. 'all,90' or 'all 90'");
+  Serial.println("3. us,microseconds             -> e.g. 'us,1500' (test raw pulse)");
+  Serial.println("4. stop                        -> Detaches/Powers down motors");
+  Serial.println("--------------------------------------------------");
+  Serial.println("DIAGNOSTIC TEST FOR CONTINUOUS ROTATION VS 180 SERVO:");
+  Serial.println("- If 90 stops, but 0 and 180 spin endlessly: you have a 360-DEGREE CONTINUOUS servo.");
+  Serial.println("- 180-degree servos MUST move to position and lock stiff.");
+  Serial.println("--------------------------------------------------");
   Serial.println("Status: Motors are currently OFF (Limp).");
 
   // Allocate timers for ESP32Servo
@@ -67,6 +73,26 @@ void loop() {
       return;
     }
 
+    // Convert spaces to commas for flexible input: 'all 90' -> 'all,90'
+    input.replace(' ', ',');
+
+    // --- Check for raw microsecond command: 'us,1500' ---
+    if (input.startsWith("us,") || input.startsWith("pulse,")) {
+      int commaIndex = input.indexOf(',');
+      int us = input.substring(commaIndex + 1).toInt();
+      for (int i = 0; i < 8; i++) {
+        if (!servos[i].attached()) {
+          servos[i].setPeriodHertz(50);
+          servos[i].attach(servoPins[i], MIN_PULSE, MAX_PULSE);
+        }
+        servos[i].writeMicroseconds(us);
+      }
+      Serial.print("All servos set to raw pulse: ");
+      Serial.print(us);
+      Serial.println(" us (1500 us = stop for 360 deg servo, center for 180 deg servo)");
+      return;
+    }
+
     // --- Parse "key,value" format ---
     int commaIndex = input.indexOf(',');
     
@@ -85,7 +111,6 @@ void loop() {
       } else {
         // Assume it's a number
         int motorId = cmd.toInt();
-        // Basic check to ensure "0" wasn't actually text garbage
         if (motorId == 0 && cmd.charAt(0) != '0') {
            Serial.println("Error: Invalid Motor ID");
         } else {
@@ -94,7 +119,7 @@ void loop() {
       }
       
     } else {
-      Serial.println("Error: Invalid format. Use 'id,angle', 'all,angle', or 'stop'.");
+      Serial.println("Error: Invalid format. Use 'id,angle', 'all,angle', 'us,1500', or 'stop'.");
     }
   }
 }
@@ -116,16 +141,24 @@ void moveMotor(int id, int angle) {
   }
 
   servos[id].write(angle);
+  int pulseUs = map(angle, 0, 180, MIN_PULSE, MAX_PULSE);
   
   Serial.print("OK: Motor ");
   Serial.print(id);
   Serial.print(" -> ");
-  Serial.println(angle);
+  Serial.print(angle);
+  Serial.print(" deg (pulse: ");
+  Serial.print(pulseUs);
+  Serial.println(" us)");
 }
 
 void moveAll(int angle) {
+  int pulseUs = map(angle, 0, 180, MIN_PULSE, MAX_PULSE);
   Serial.print("Moving ALL to ");
-  Serial.println(angle);
+  Serial.print(angle);
+  Serial.print(" deg (pulse: ");
+  Serial.print(pulseUs);
+  Serial.println(" us)");
   for (int i = 0; i < 8; i++) {
     moveMotor(i, angle);
   }

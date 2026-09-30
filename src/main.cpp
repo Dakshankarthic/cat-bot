@@ -1,4 +1,4 @@
-﻿#include <Arduino.h>
+#include <Arduino.h>
 #include <WiFi.h>
 #include <WebServer.h>
 #include <DNSServer.h>
@@ -471,8 +471,8 @@ void setup() {
   
   for (int i = 0; i < 8; i++) {
     servos[i].setPeriodHertz(50);
-    // Map 0-180 to approx 732-2929us
-    servos[i].attach(servoPins[i], 732, 2929);
+    // Standard servo pulse mapping: 500us (0 deg) to 2500us (180 deg), 1500us center
+    servos[i].attach(servoPins[i], 500, 2500);
   }
   delay(10);
   
